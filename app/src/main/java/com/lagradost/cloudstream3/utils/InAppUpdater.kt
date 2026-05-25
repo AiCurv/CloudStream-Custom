@@ -36,7 +36,8 @@ import java.io.IOException
 import java.io.InputStreamReader
 
 object InAppUpdater {
-    private const val GITHUB_USER_NAME = "recloudstream"
+    // Custom build: point to our fork for updates instead of the original repo
+    private const val GITHUB_USER_NAME = "AiCurv"
     private const val GITHUB_REPO = "cloudstream"
 
     private const val PRERELEASE_PACKAGE_NAME = "com.lagradost.cloudstream3.prerelease"
@@ -146,34 +147,33 @@ object InAppUpdater {
     }
 
     private suspend fun Activity.getPreReleaseUpdate(): Update {
-        val tagUrl =
-            "https://api.github.com/repos/$GITHUB_USER_NAME/$GITHUB_REPO/git/ref/tags/pre-release"
+        // Custom build: check our fork's releases instead of the original pre-release tag
         val releaseUrl = "https://api.github.com/repos/$GITHUB_USER_NAME/$GITHUB_REPO/releases"
         val headers = mapOf("Accept" to "application/vnd.github.v3+json")
         val response = parseJson<List<GithubRelease>>(
             app.get(releaseUrl, headers = headers).text
         )
 
-        val found = response.lastOrNull { rel ->
-            rel.prerelease || rel.tagName == "pre-release"
-        }
+        // Find the latest release from our fork (custom builds)
+        val found = response.firstOrNull()
 
         val foundAsset = found?.assets?.filter { it ->
             it.contentType == "application/vnd.android.package-archive"
-        }?.getOrNull(0)
+        }?.firstOrNull { it.name.contains("prerelease") }
 
-        if (foundAsset == null) {
+        if (found == null || foundAsset == null) {
             return Update(false, null, null, null, null)
         }
 
-        val tagResponse = parseJson<GithubTag>(app.get(tagUrl, headers = headers).text)
-        val updateCommitHash = tagResponse.githubObject.sha.trim().take(7)
-        Log.d(LOG_TAG, "Fetched GitHub tag: $updateCommitHash")
+        // Compare by tag name since we don't use the pre-release tag ref
+        val remoteVersion = found.tagName
+        val localVersion = BuildConfig.VERSION_NAME
+        val shouldUpdate = remoteVersion != localVersion
 
         return Update(
-            currentCommitHash() != updateCommitHash,
+            shouldUpdate,
             foundAsset.browserDownloadUrl,
-            updateCommitHash,
+            remoteVersion,
             found.body,
             found.nodeId
         )
