@@ -1,0 +1,84 @@
+name: Custom Build Release
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: "custom-build"
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: temurin
+        java-version: 17
+
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+
+    - name: Generate signing keystore
+      run: |
+        KEYSTORE_DIR="${RUNNER_TEMP}/keystore"
+        mkdir -p "${KEYSTORE_DIR}"
+        keytool -genkey -v \
+          -keystore "${KEYSTORE_DIR}/release.keystore" \
+          -alias key0 \
+          -keyalg RSA \
+          -keysize 2048 \
+          -validity 10000 \
+          -storepass android \
+          -keypass android \
+          -dname "CN=Custom Build,O=Custom,C=US"
+
+    - name: Setup Gradle
+      uses: gradle/actions/setup-gradle@v4
+
+    - name: Build prerelease release APK
+      run: ./gradlew assemblePrereleaseRelease
+      env:
+        SIGNING_KEY_ALIAS: "key0"
+        SIGNING_KEY_PASSWORD: "android"
+        SIGNING_STORE_PASSWORD: "android"
+
+    - name: Build stable release APK
+      run: ./gradlew assembleStableRelease
+
+    - name: Get build info
+      id: info
+      run: |
+        echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: v4.7.0-custom-${{ steps.info.outputs.sha_short }}
+        name: "CloudStream Custom Build (${{ steps.info.outputs.sha_short }})"
+        body: |
+          ## CloudStream Custom Build
+
+          **New Features:**
+          - **External Player Support**: Open video/audio streams directly from Stremio, browsers, and other apps. CloudStream now appears in Android's "Open with" / "Share" menu for video URLs.
+          - **Exit Confirmation**: Accidentally pressing back won't kill your stream anymore! A confirmation dialog now appears before exiting the player, so you won't lose your buffered stream.
+
+          **Based on:** CloudStream 4.7.0
+          **Commit:** ${{ steps.info.outputs.sha_short }}
+
+          > Note: The `prerelease` APK uses a different package name (`.prerelease`), so it can be installed alongside the original CloudStream. The `stable` APK uses the same package name and will replace the original.
+        files: |
+          app/build/outputs/apk/prerelease/release/*.apk
+          app/build/outputs/apk/stable/release/*.apk
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

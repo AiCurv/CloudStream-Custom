@@ -4,6 +4,7 @@ import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.view.KeyEvent
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.lagradost.cloudstream3.CommonActivity
 import com.lagradost.cloudstream3.R
@@ -17,6 +18,8 @@ class DownloadedPlayerActivity : AppCompatActivity() {
     companion object {
         const val TAG = "DownloadedPlayerActivity"
     }
+
+    private var exitDialog: AlertDialog? = null
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean =
         CommonActivity.dispatchKeyEvent(this, event) ?: super.dispatchKeyEvent(event)
@@ -60,7 +63,26 @@ class DownloadedPlayerActivity : AppCompatActivity() {
         Log.i(TAG, "onCreate")
 
         handleIntent(intent)
-        attachBackPressedCallback("DownloadedPlayerActivity") { finish() }
+        attachBackPressedCallback("DownloadedPlayerActivity") {
+            if (exitDialog?.isShowing == true) {
+                exitDialog?.dismiss()
+                return@attachBackPressedCallback
+            }
+            showExitConfirmDialog()
+        }
+    }
+
+    private fun showExitConfirmDialog() {
+        if (isFinishing || isDestroyed) return
+        exitDialog = AlertDialog.Builder(this, R.style.AlertDialogCustom)
+            .setTitle(R.string.exit_player_confirm_title)
+            .setMessage(R.string.exit_player_confirm_message)
+            .setPositiveButton(R.string.yes) { _, _ ->
+                finish()
+            }
+            .setNegativeButton(R.string.no, null)
+            .setOnDismissListener { exitDialog = null }
+            .show()
     }
 
     private fun handleIntent(intent: Intent) {
@@ -79,8 +101,12 @@ class DownloadedPlayerActivity : AppCompatActivity() {
             val item = if (cd != null && cd.itemCount > 0) cd.getItemAt(0) else null
             val url = item?.text?.toString()
             when {
+                item?.uri != null && item.uri.scheme in listOf("http", "https") ->
+                    playLink(this, item.uri.toString())
                 item?.uri != null -> playUri(this, item.uri)
                 url != null -> playLink(this, url)
+                data != null && data.scheme in listOf("http", "https") ->
+                    playLink(this, data.toString())
                 data != null -> playUri(this, data)
                 extraText != null -> playLink(this, extraText)
                 else -> { finish(); return }
