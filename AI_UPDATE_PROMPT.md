@@ -6,26 +6,26 @@
 
 ## How Updating Works
 
-This repo is a **fork** of [recloudstream/cloudstream](https://github.com/recloudstream/cloudstream) with **2 custom features** added on top. When the original repo gets new updates, we need to:
+This repo is a **custom build** of [recloudstream/cloudstream](https://github.com/recloudstream/cloudstream) with **2 custom features** added on top. When the original repo gets new updates, we need to:
 
-1. **Sync** our fork with the upstream (original) repo
+1. **Sync** with the upstream (original) repo
 2. **Re-apply** our custom features if they got overwritten by merge conflicts
 3. **Push** the updated code → GitHub Actions auto-builds a new APK release
 
 ### Will clicking "Update" in the app remove our features?
 
-**NO.** The auto-updater has been redirected to check **our fork's releases** instead of the original CloudStream. Any update popup you see now comes from our fork, not the original. So updating will always give you a build with our custom features included.
+**NO.** The auto-updater has been redirected to check **this repo's releases** instead of the original CloudStream. Any update popup you see now comes from our custom build, not the original. So updating will always give you a build with our custom features included.
 
 ---
 
 ## Copy This Prompt 👇
 
 ```
-You are updating a custom fork of CloudStream (an Android streaming app) to the latest version from the original repo. The fork is at: https://github.com/AiCurv/cloudstream
+You are updating a custom build of CloudStream (an Android streaming app) to the latest version from the original repo. The custom repo is at: https://github.com/AiCurv/CloudStream-Custom
 
 ## Context
 
-This fork has 2 custom features added on top of the original CloudStream. Your job is to sync with the upstream repo and make sure the custom features still work.
+This custom build has 2 custom features added on top of the original CloudStream. Your job is to sync with the upstream repo and make sure the custom features still work.
 
 ## Custom Features (MUST be preserved)
 
@@ -84,10 +84,10 @@ This fork has 2 custom features added on top of the original CloudStream. Your j
 
 ## Update Steps
 
-1. **Clone the fork** (if not already cloned):
+1. **Clone the repo** (if not already cloned):
    ```bash
-   git clone https://github.com/AiCurv/cloudstream.git
-   cd cloudstream
+   git clone https://github.com/AiCurv/CloudStream-Custom.git
+   cd CloudStream-Custom
    ```
 
 2. **Add upstream remote** (original repo):
@@ -109,7 +109,7 @@ This fork has 2 custom features added on top of the original CloudStream. Your j
    - `AndroidManifest.xml` — Make sure our 3 intent-filters are still present after the magnet intent-filter
    - `DownloadedPlayerActivity.kt` — Make sure http/https routing and exit dialog are intact
    - `FullScreenPlayer.kt` — Make sure `showExitConfirmDialog()` and the back press change are intact
-   - `InAppUpdater.kt` — Make sure `GITHUB_USER_NAME = "AiCurv"` and the custom `getPreReleaseUpdate()` are intact
+   - `InAppUpdater.kt` — Make sure `GITHUB_USER_NAME = "AiCurv"` and `GITHUB_REPO = "CloudStream-Custom"` and the custom `getPreReleaseUpdate()` are intact
    - `strings.xml` — Make sure `exit_player_confirm_title` and `exit_player_confirm_message` strings exist
 
 6. **Test build locally** (optional, if you have Android SDK):
@@ -125,20 +125,20 @@ This fork has 2 custom features added on top of the original CloudStream. Your j
    ```
 
 8. **Verify build** — The GitHub Actions workflow will automatically trigger and build a new APK release. Check:
-   - https://github.com/AiCurv/cloudstream/actions
+   - https://github.com/AiCurv/CloudStream-Custom/actions
    - Once the build completes, a new release will appear at:
-   - https://github.com/AiCurv/cloudstream/releases
+   - https://github.com/AiCurv/CloudStream-Custom/releases
 
 9. **Disable original workflows** — If new workflow files were pulled from upstream that require secrets we don't have (GH_APP_ID, keystore, etc.), disable them:
    ```bash
    # List all workflows
    curl -s -H "Authorization: token <GITHUB_TOKEN>" \
-     "https://api.github.com/repos/AiCurv/cloudstream/actions/workflows" | \
+     "https://api.github.com/repos/AiCurv/CloudStream-Custom/actions/workflows" | \
      python3 -c "import sys,json; [print(f\"{w['id']}: {w['name']} ({w['state']})\") for w in json.load(sys.stdin)['workflows']]"
    
    # Disable any workflow that isn't "Custom Build Release"
    curl -s -X PUT -H "Authorization: token <GITHUB_TOKEN>" \
-     "https://api.github.com/repos/AiCurv/cloudstream/actions/workflows/<WORKFLOW_ID>/disable"
+     "https://api.github.com/repos/AiCurv/CloudStream-Custom/actions/workflows/<WORKFLOW_ID>/disable"
    ```
 
 ## Quick Verification Checklist
@@ -149,7 +149,7 @@ After merging, verify these specific lines exist in the codebase:
 - [ ] `DownloadedPlayerActivity.kt`: Contains `item.uri.scheme in listOf("http", "https")` in handleIntent()
 - [ ] `DownloadedPlayerActivity.kt`: Contains `showExitConfirmDialog()` in back press callback
 - [ ] `FullScreenPlayer.kt`: Contains `showExitConfirmDialog()` method and call in back press handler
-- [ ] `InAppUpdater.kt`: `GITHUB_USER_NAME = "AiCurv"` (NOT "recloudstream")
+- [ ] `InAppUpdater.kt`: `GITHUB_USER_NAME = "AiCurv"` and `GITHUB_REPO = "CloudStream-Custom"` (NOT "recloudstream" / "cloudstream")
 - [ ] `strings.xml`: Contains `exit_player_confirm_title` and `exit_player_confirm_message`
 - [ ] `.github/workflows/custom-build.yml` exists
 ```
@@ -165,7 +165,7 @@ A: Not hard at all! Most of the time it's just a git merge. The custom features 
 A: The AI agent will resolve them by re-applying our custom features on top of the updated code. The verification checklist above ensures nothing is missed.
 
 **Q: What about the original CloudStream's update popup?**
-A: That popup is now gone! We redirected the auto-updater to check our fork's releases. Any update you see comes from our fork and includes our custom features.
+A: That popup is now gone! We redirected the auto-updater to check our custom build's releases. Any update you see comes from our repo and includes our custom features.
 
 **Q: Can I install this alongside the original CloudStream?**
 A: Yes! The prerelease APK uses package name `com.lagradost.cloudstream3.prerelease` (different from original's `com.lagradost.cloudstream3`), so both can coexist.

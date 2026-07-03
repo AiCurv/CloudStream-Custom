@@ -38,7 +38,7 @@ import java.io.InputStreamReader
 object InAppUpdater {
     // Custom build: point to our fork for updates instead of the original repo
     private const val GITHUB_USER_NAME = "AiCurv"
-    private const val GITHUB_REPO = "cloudstream"
+    private const val GITHUB_REPO = "CloudStream-Custom"
 
     private const val PRERELEASE_PACKAGE_NAME = "com.lagradost.cloudstream3.prerelease"
     private const val LOG_TAG = "InAppUpdater"
