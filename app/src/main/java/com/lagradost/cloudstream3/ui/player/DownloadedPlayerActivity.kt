@@ -87,33 +87,106 @@ class DownloadedPlayerActivity : AppCompatActivity() {
 
     private fun handleIntent(intent: Intent) {
         val data = intent.data
+        val dataString = intent.dataString
+        val action = intent.action
+        val scheme = data?.scheme
+
+        // Comprehensive diagnostics for external intent troubleshooting.
+        // Filter logcat with: adb logcat -s DownloadedPlayerActivity
+        Log.d(
+            TAG,
+            "handleIntent: action=$action, scheme=$scheme, " +
+                "data=$data, dataString=$dataString, " +
+                "mimeType=${intent.type}, clipData=${intent.clipData}, " +
+                "extras=${intent.extras}"
+        )
+
+        // Structured CloudStream-package playback (LINKS_EXTRA JSON array) — used when
+        // CS3 launches itself for "Play in CloudStream" from inside the app.
         if (OfflinePlaybackHelper.playIntent(activity = this, intent = intent)) {
+            Log.d(TAG, "handleIntent: routed via OfflinePlaybackHelper.playIntent (LINKS_EXTRA)")
             return
         }
 
         if (
-            intent.action == Intent.ACTION_SEND ||
-            intent.action == Intent.ACTION_OPEN_DOCUMENT ||
-            intent.action == Intent.ACTION_VIEW
+            action == Intent.ACTION_SEND ||
+            action == Intent.ACTION_OPEN_DOCUMENT ||
+            action == Intent.ACTION_VIEW
         ) {
             val extraText = safe { intent.getStringExtra(Intent.EXTRA_TEXT) }
             val cd = intent.clipData
             val item = if (cd != null && cd.itemCount > 0) cd.getItemAt(0) else null
-            val url = item?.text?.toString()
+            val itemUri = item?.uri
+            val itemText = item?.text?.toString()
+
+            // Some senders (incl. internal helpers and certain share sheets) pass the URL
+            // as a string extra instead of intent.data. Read all known locations so we
+            // can interop with as many external players / ADB invocations as possible.
+            val extraUrl = safe { intent.getStringExtra("url") }
+            val extraMagnetLink = safe { intent.getStringExtra("magnet_link") }
+            val extraMagnet = safe { intent.getStringExtra("magnet") }
+
+            // Resolve a single URL string. For magnet URIs we prefer the raw dataString
+            // because Uri.toString() can re-encode characters (e.g. '=' inside tracker
+            // query strings) and corrupt the magnet for the torrent engine.
+            val resolvedUrl: String? = when {
+                // Direct magnet/http/https URI on intent.data
+                scheme == "magnet" -> dataString ?: data?.toString()
+                scheme == "http" || scheme == "https" -> dataString ?: data?.toString()
+                // Magnet/http/https URI on clipData item
+                itemUri?.scheme == "magnet" -> itemUri.toString()
+                itemUri?.scheme == "http" || itemUri?.scheme == "https" ->
+                    itemUri.toString()
+                // String extras (used by some internal callers and external senders)
+                extraMagnetLink?.startsWith("magnet:") == true -> extraMagnetLink
+                extraMagnet?.startsWith("magnet:") == true -> extraMagnet
+                extraUrl?.startsWith("magnet:") == true -> extraUrl
+                extraUrl?.startsWith("http://") == true ||
+                    extraUrl?.startsWith("https://") == true -> extraUrl
+                // Plain text from ClipData item or EXTRA_TEXT (share-sheet flow)
+                itemText?.startsWith("magnet:") == true -> itemText
+                itemText?.startsWith("http://") == true ||
+                    itemText?.startsWith("https://") == true -> itemText
+                extraText?.startsWith("magnet:") == true -> extraText
+                extraText?.startsWith("http://") == true ||
+                    extraText?.startsWith("https://") == true -> extraText
+                else -> null
+            }
+
+            Log.d(TAG, "handleIntent: resolvedUrl=$resolvedUrl")
+
             when {
-                item?.uri != null && item.uri.scheme in listOf("http", "https") ->
-                    playLink(this, item.uri.toString())
-                item?.uri != null -> playUri(this, item.uri)
-                url != null -> playLink(this, url)
-                data != null && data.scheme in listOf("http", "https") ->
-                    playLink(this, data.toString())
+                resolvedUrl != null && resolvedUrl.startsWith("magnet:") -> {
+                    // The user explicitly picked CloudStream from Android's "Open with"
+                    // menu (or sent the magnet via ADB), so they have already consented
+                    // to torrent playback for this stream. Auto-accept here, otherwise
+                    // the in-app torrent gate at CS3IPlayer.kt would block with
+                    // R.string.torrent_not_accepted if the user had ever declined a
+                    // torrent earlier in the same process session — which is the most
+                    // common cause of the "broken link" symptom for external magnets.
+                    Torrent.hasAcceptedTorrentForThisSession = true
+                    playLink(this, resolvedUrl)
+                }
+                resolvedUrl != null && (
+                    resolvedUrl.startsWith("http://") ||
+                        resolvedUrl.startsWith("https://")
+                ) -> playLink(this, resolvedUrl)
+                // Non-URL URIs (content://, file://) — let playUri handle them. playUri
+                // also has its own magnet branch as a safety net.
+                itemUri != null -> playUri(this, itemUri)
                 data != null -> playUri(this, data)
-                extraText != null -> playLink(this, extraText)
-                else -> { finish(); return }
+                else -> {
+                    Log.w(TAG, "handleIntent: no valid URL/URI found in intent, finishing")
+                    finish()
+                    return
+                }
             }
         } else if (data?.scheme == "content") {
             playUri(this, data)
-        } else finish()
+        } else {
+            Log.w(TAG, "handleIntent: unhandled action=$action scheme=$scheme, finishing")
+            finish()
+        }
     }
 
     override fun onResume() {
